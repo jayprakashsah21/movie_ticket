@@ -2,19 +2,28 @@ package com.client;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class MovieTicketBooking {
 
-	private static int[] tickets = new int[50];
+	private final static int NUMBER_OF_TICKETS=10;
+	private static int[] tickets = new int[NUMBER_OF_TICKETS];
 
 	public static void main(String[] args) {
 		// TODO Auto-generated method stub
 
 		ExecutorService executor = Executors.newFixedThreadPool(8);
-		ReentrantLock rl = new ReentrantLock();
-		BookTickets bk1 = new BookTickets(tickets, rl);
-		BookTickets bk2 = new BookTickets(tickets, rl);
+	//	ReentrantLock rl = new ReentrantLock();
+
+		ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+		Lock readLock = readWriteLock.readLock();
+		Lock writeLock = readWriteLock.writeLock();
+
+		BookTickets bk1 = new BookTickets(tickets, readLock, writeLock);
+		BookTickets bk2 = new BookTickets(tickets, readLock, writeLock);
+
 		executor.submit(bk1);
 		executor.submit(bk2);
 	}
@@ -24,11 +33,14 @@ public class MovieTicketBooking {
 class BookTickets implements Runnable {
 
 	private int tickets[];
-	private ReentrantLock rl;
+//	private ReentrantLock rl;
+	private Lock readLock;
+	private Lock wrteLock;
 
-	BookTickets(int tickets[], ReentrantLock rl) {
+	BookTickets(int tickets[], Lock readLock, Lock wrteLock) {
 		this.tickets = tickets;
-		this.rl = rl;
+		this.readLock = readLock;
+		this.wrteLock = wrteLock;
 	}
 
 	@Override
@@ -42,21 +54,25 @@ class BookTickets implements Runnable {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
-
-			if (rl.tryLock()) {
-
-				try {
-					int ticketNumber = bookTicket();
-					if (ticketNumber != 0) {
-						printTicketNumber(ticketNumber);
-					} else {
-						System.out.println("No Seats arre available");
-					}
-				} finally {
-					rl.unlock();
-				}
-				// cancelTicket(ticketNumber);
+			int ticketNumber = -1;
+			try {
+				wrteLock.lock();
+				ticketNumber = bookTicket();
+			} finally {
+				wrteLock.unlock();
 			}
+			try {
+				readLock.lock();
+				if (ticketNumber != 0) {
+					printTicketNumber(ticketNumber);
+				} else {
+					System.out.println("No Seats arre available");
+				}
+			} finally {
+				readLock.unlock();
+			}
+			//can be called based on the user input with read and write lock
+			// cancelTicket(ticketNumber);
 		}
 
 	}
